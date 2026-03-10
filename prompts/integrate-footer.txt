@@ -1,0 +1,7 @@
+Integrate the global footer, using the `02-layouts/footer/footer.twig` file within Gesso.
+
+REQUIREMENTS
+- Contact Us should be a user-editable block
+- Social icons can be hard-coded
+- The menu should use the existing `footer` menu
+- The copyright statement should always show the current year

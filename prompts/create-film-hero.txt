@@ -1,0 +1,14 @@
+Create the film detail hero shown in the design. Create the component in Storybook. The
+hero will eventually be used on a node template, but you should not integrate it with
+Drupal yet.
+
+DESIGN:
+/assets/design-film-detail.png
+
+ASSETS:
+Image: /assets/little-shop-of-horrors.jpg
+
+FIELDS:
+- title
+- image
+
