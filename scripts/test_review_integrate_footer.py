@@ -199,7 +199,14 @@ class TestCheck2MenuSocialRef:
 class TestCheck3ContactInFirst:
     def _check(self, twig_text: str) -> bool:
         block_content = rif.extract_block_content(twig_text, "first")
-        return bool(re.search(r'contact_us|contact-us|gesso_contact_us', block_content, re.IGNORECASE))
+        if re.search(r'contact_us|contact-us|gesso_contact_us', block_content, re.IGNORECASE):
+            return True
+        # Alternate: contact_us block passed as footer_content_first variable
+        return bool(re.search(
+            r'footer_content_first\s*[=:]\s*[^,\n]*(?:contact_us|contact-us|gesso_contact_us)'
+            r'|(?:contact_us|contact-us|gesso_contact_us)[^,\n]*footer_content_first',
+            twig_text, re.IGNORECASE
+        ))
 
     def test_pass_contact_us_underscore(self):
         twig = "{% block first %}\n{{ drupal_block('contact_us') }}\n{% endblock %}"
@@ -230,6 +237,31 @@ class TestCheck3ContactInFirst:
 
     def test_fail_contact_outside_block(self):
         twig = "contact_us\n{% block first %}\n  nothing\n{% endblock %}"
+        assert not self._check(twig)
+
+    # Alternate approach: contact_us passed via footer_content_first variable
+    def test_pass_contact_via_footer_content_first_set(self):
+        twig = "{% set footer_content_first = drupal_block('contact_us') %}"
+        assert self._check(twig)
+
+    def test_pass_contact_us_hyphen_via_footer_content_first(self):
+        twig = "{% set footer_content_first = drupal_block('contact-us') %}"
+        assert self._check(twig)
+
+    def test_pass_gesso_contact_us_via_footer_content_first(self):
+        twig = "{% set footer_content_first = drupal_block('gesso_contact_us') %}"
+        assert self._check(twig)
+
+    def test_pass_footer_content_first_with_with_syntax(self):
+        twig = "{% include 'footer.twig' with {footer_content_first: drupal_block('contact_us')} %}"
+        assert self._check(twig)
+
+    def test_fail_footer_content_first_without_contact(self):
+        twig = "{% set footer_content_first = drupal_block('some_other_block') %}"
+        assert not self._check(twig)
+
+    def test_fail_contact_us_not_assigned_to_footer_content_first(self):
+        twig = "{% set other_var = drupal_block('contact_us') %}"
         assert not self._check(twig)
 
 
@@ -317,10 +349,24 @@ class TestCheck4SecondSlot:
 class TestCheck5CopyrightInThird:
     def _check(self, twig_text: str) -> bool:
         third = rif.extract_block_content(twig_text, "third")
-        return bool(re.search(r'copyright', third, re.IGNORECASE))
+        hardcoded_in_third = bool(re.search(r'202[0-9]\b', third))
+        dynamic_in_third = bool(re.search(
+            r'"now"\s*\|\s*date|\'now\'\s*\|\s*date|now\s*\|\s*date|current_year',
+            third
+        ))
+        if dynamic_in_third:
+            return True
+        if not hardcoded_in_third and re.search(r'copyright', third, re.IGNORECASE):
+            return True
+        # Alternate: copyright content passed as footer_content_third variable
+        return bool(re.search(
+            r'footer_content_third\s*[=:]\s*[^,\n]*copyright'
+            r'|copyright[^,\n]*footer_content_third',
+            twig_text, re.IGNORECASE
+        ))
 
     def test_pass_copyright_lowercase(self):
-        twig = "{% block third %}\n  copyright 2024\n{% endblock %}"
+        twig = "{% block third %}\n  copyright\n{% endblock %}"
         assert self._check(twig)
 
     def test_pass_copyright_uppercase(self):
@@ -328,7 +374,7 @@ class TestCheck5CopyrightInThird:
         assert self._check(twig)
 
     def test_pass_copyright_symbol_pattern(self):
-        twig = "{% block third %}\n  Copyright &copy; 2024\n{% endblock %}"
+        twig = "{% block third %}\n  Copyright &copy; {{ \"now\"|date(\"Y\") }}\n{% endblock %}"
         assert self._check(twig)
 
     def test_fail_copyright_in_first_slot(self):
@@ -346,6 +392,41 @@ class TestCheck5CopyrightInThird:
         twig = "{% block first %}\n  copyright\n{% endblock %}"
         assert not self._check(twig)
 
+    # Alternate approach: copyright passed via footer_content_third variable
+    def test_pass_copyright_via_footer_content_third_set(self):
+        twig = "{% set footer_content_third = 'Copyright ' ~ current_year %}"
+        assert self._check(twig)
+
+    def test_pass_copyright_via_footer_content_third_with_syntax(self):
+        twig = "{% include 'footer.twig' with {footer_content_third: 'Copyright ' ~ current_year} %}"
+        assert self._check(twig)
+
+    def test_pass_copyright_uppercase_via_footer_content_third(self):
+        twig = "{% set footer_content_third = 'COPYRIGHT ' ~ current_year %}"
+        assert self._check(twig)
+
+    def test_fail_footer_content_third_without_copyright(self):
+        twig = "{% set footer_content_third = 'All rights reserved' %}"
+        assert not self._check(twig)
+
+    def test_fail_copyright_not_assigned_to_footer_content_third(self):
+        twig = "{% set other_var = 'Copyright 2024' %}"
+        assert not self._check(twig)
+
+    # Dynamic year patterns in third slot
+    def test_pass_now_date_Y_in_third_slot(self):
+        twig = '{% block third %}\n  Copyright {{ "now"|date("Y") }}\n{% endblock %}'
+        assert self._check(twig)
+
+    def test_pass_now_date_Y_without_copyright_text(self):
+        # {{ "now"|date("Y") }} alone in third slot counts as a valid copyright year block
+        twig = '{% block third %}\n  {{ "now"|date("Y") }}\n{% endblock %}'
+        assert self._check(twig)
+
+    def test_fail_hardcoded_year_in_third_slot(self):
+        twig = "{% block third %}\n  Copyright 2024\n{% endblock %}"
+        assert not self._check(twig)
+
 
 # ---------------------------------------------------------------------------
 # CHECK 6: Copyright year is dynamic
@@ -356,10 +437,7 @@ class TestCheck6DynamicYear:
         return bool(re.search(r"date\(['\"]Y['\"]|current_year|year.*date", content))
 
     def _twig_dynamic(self, content: str) -> bool:
-        return (
-            bool(re.search(r"current_year|'now'\s*\|date|now\s*\|date", content))
-            and bool(re.search(r'year|date', content, re.IGNORECASE))
-        )
+        return bool(re.search(r"""current_year|["']now["']\s*\|date|now\s*\|date""", content))
 
     def _hardcoded(self, content: str) -> bool:
         for line in content.splitlines():
@@ -396,10 +474,12 @@ class TestCheck6DynamicYear:
         content = "{{ now|date('Y') }}\ncopyright year"
         assert self._twig_dynamic(content)
 
-    def test_twig_dynamic_requires_year_or_date_keyword(self):
-        # current_year alone is enough (also contains "year")
+    def test_twig_now_date_Y_double_quotes(self):
+        content = '<p class="l-footer__copyright">&copy; {{ "now"|date("Y") }} All rights reserved.</p>'
+        assert self._twig_dynamic(content)
+
+    def test_twig_current_year_alone_passes(self):
         content = "{{ current_year }}"
-        # "current_year" matches 'year' regex, so it passes
         assert self._twig_dynamic(content)
 
     def test_twig_no_dynamic_year(self):

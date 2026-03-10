@@ -135,7 +135,14 @@ def review_worktree(index: int, worker_prefix: str) -> bool:
 
     def check_contact_in_first(twig_text: str) -> bool:
         block_content = extract_block_content(twig_text, "first")
-        return bool(re.search(r'contact_us|contact-us|gesso_contact_us', block_content, re.IGNORECASE))
+        if re.search(r'contact_us|contact-us|gesso_contact_us', block_content, re.IGNORECASE):
+            return True
+        # Alternate: contact_us block passed as footer_content_first variable
+        return bool(re.search(
+            r'footer_content_first\s*[=:]\s*[^,\n]*(?:contact_us|contact-us|gesso_contact_us)'
+            r'|(?:contact_us|contact-us|gesso_contact_us)[^,\n]*footer_content_first',
+            twig_text, re.IGNORECASE
+        ))
 
     if footer_twig_path.is_file():
         contact_in_first = check_contact_in_first(footer_twig_path.read_text(errors="replace"))
@@ -201,22 +208,35 @@ def review_worktree(index: int, worker_prefix: str) -> bool:
         fail_count += 1
 
     # ------------------------------------------------------------------
-    # CHECK 5: Copyright in third footer slot
+    # CHECK 5: Copyright in third footer slot (dynamic year required)
     # ------------------------------------------------------------------
     copyright_in_third = False
 
     if footer_twig_path.is_file():
-        third_content = extract_block_content(
-            footer_twig_path.read_text(errors="replace"), "third"
-        )
-        copyright_in_third = bool(re.search(r'copyright', third_content, re.IGNORECASE))
+        twig_text = footer_twig_path.read_text(errors="replace")
+        third_content = extract_block_content(twig_text, "third")
+        # Hardcoded year in third slot is a failure
+        hardcoded_in_third = bool(re.search(r'202[0-9]\b', third_content))
+        # Dynamic year pattern passes regardless of "copyright" keyword
+        dynamic_in_third = bool(re.search(
+            r'"now"\s*\|\s*date|\'now\'\s*\|\s*date|now\s*\|\s*date|current_year',
+            third_content
+        ))
+        if dynamic_in_third:
+            copyright_in_third = True
+        elif not hardcoded_in_third and re.search(r'copyright', third_content, re.IGNORECASE):
+            copyright_in_third = True
+        elif re.search(r'footer_content_third\s*[=:]\s*[^,\n]*copyright'
+                       r'|copyright[^,\n]*footer_content_third',
+                       twig_text, re.IGNORECASE):
+            copyright_in_third = True
 
     if copyright_in_third:
         check("Copyright in third footer slot", "PASS")
         pass_count += 1
     else:
         check("Copyright in third footer slot", "FAIL",
-              "copyright not found in {% block third %}")
+              "copyright not found in {% block third %} or hardcoded year detected")
         fail_count += 1
 
     # ------------------------------------------------------------------
@@ -249,8 +269,7 @@ def review_worktree(index: int, worker_prefix: str) -> bool:
                 if "node_modules" in f.parts:
                     continue
                 content = f.read_text(errors="replace")
-                if re.search(r"current_year|'now'\s*\|date|now\s*\|date", content) and \
-                   re.search(r'year|date', content, re.IGNORECASE):
+                if re.search(r"""current_year|["']now["']\s*\|date|now\s*\|date""", content):
                     dynamic_year = True
                     year_detail = "Twig dynamic year reference found"
                     break
