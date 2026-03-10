@@ -1,3 +1,5 @@
 Modify the Basic page administration so that if "Is homepage?" is checked, the "Hero Title"
-field becomes required in the "Hero" paragraph. Use the "Hero Title" field in the "Hero" paragraph as the page title
-when displaying on the front-end.
+field becomes required in the "Hero" paragraph.
+
+In addition, when checked, the "Hero Title" field in the "Hero" paragraph should
+be displayed instead of the page title for the page.
