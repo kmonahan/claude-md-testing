@@ -4,3 +4,4 @@ drupal-test*/
 agent-logs
 __pycache__
 
+.Rproj.user
